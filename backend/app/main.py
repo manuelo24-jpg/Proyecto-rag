@@ -2,15 +2,17 @@
 main.py — Servidor FastAPI que expone el agente RAG como API REST.
 """
 import os
+import shutil
+import tempfile
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, AIMessage
 
-from app.agent import build_agent, get_retriever, invoke_agent
+from app.agent import build_agent, get_retriever, invoke_agent, add_document
 
 load_dotenv(override=True)
 
@@ -101,3 +103,34 @@ def chat(request: ChatRequest):
         historial_out.append(Mensaje(role=role, content=msg.content))
 
     return ChatResponse(respuesta=respuesta_str, historial=historial_out)
+
+class URLRequest(BaseModel):
+    url: str
+
+@app.post("/upload/file")
+async def upload_file(file: UploadFile = File(...)):
+    """Sube un archivo PDF o DOCX a la base de datos de conocimiento."""
+    if not file.filename.endswith(('.pdf', '.docx')):
+        raise HTTPException(status_code=400, detail="Solo se soportan archivos .pdf y .docx")
+    
+    temp_dir = tempfile.gettempdir()
+    temp_path = os.path.join(temp_dir, file.filename)
+    try:
+        with open(temp_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        num_fragmentos = add_document(temp_path, is_url=False)
+        return {"status": "ok", "message": f"Archivo '{file.filename}' indexado en {num_fragmentos} fragmentos."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error indexando archivo: {str(e)}")
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+@app.post("/upload/url")
+def upload_url(request: URLRequest):
+    """Sube un enlace (URL) a la base de datos de conocimiento."""
+    try:
+        num_fragmentos = add_document(request.url, is_url=True)
+        return {"status": "ok", "message": f"URL '{request.url}' indexada en {num_fragmentos} fragmentos."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error indexando URL: {str(e)}")
