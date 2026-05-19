@@ -5,7 +5,7 @@ Convertido desde el notebook rag_web.ipynb.
 import os
 import bs4
 
-from langchain_community.document_loaders import WebBaseLoader, PyPDFLoader, Docx2txtLoader
+from langchain.document_loaders import WebBaseLoader, PyPDFLoader, Docx2txtLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
